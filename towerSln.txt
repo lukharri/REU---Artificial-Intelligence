@@ -1,0 +1,375 @@
+% Plan Failure Analysis and Diagnostics Domain Description
+% A human and a robot each have a cache of cubic blocks that each have exactly one color. They both can move 
+% their blocks to/from their storage to a table that they share. They use their blocks to build stacks on the table.
+
+% Goals
+% 1.  Design an intelligent agent that can carry out human commands via observation, planning, and execution.
+% 1a. Design an agent that can carry out the command "add another blue stack of the same height"
+% 2.  Give the agent the ability to determine when and why a command cannot be carried out and the way to communicate this 
+%     to the human. 
+
+% Identify the OBJECTS and RELATIONS of the domain
+% Objects - blks, human, robot, table, stacks, colors, locations, fluents, actions, configurations
+% Relations - on, move, moveExists, goal, success
+
+% horizon const
+  #const x = 3.
+% height const
+  #const h = 5.
+
+% statics: blk colors, stacks, locations
+
+% inertial fluents: on
+
+% defined fluents: above, occupied, isStack, inStack, stackColor
+
+% actions: move
+
+sorts
+
+	#blk = [b][1..5].
+	
+	% t - tbl; hs - human storage; rs - robot storage
+	#loc = #blk + {t, hs, rs}.
+	
+	#color = {b, g, r, m, mc}.
+
+	#time = 0..x.
+
+	#height = 0..h.
+
+	#inertialFluent = on(#blk(B), #loc(L)) : B != L.
+
+	#definedFluent = above(#blk(B), #loc(L)) : B != L +
+                	 	    occupied(#blk) +
+                 	 	    isStack(#blk) +
+                 	 	    stackColor(#blk, #color) +
+				    inStack(#blk, #blk).
+
+	#fluent = #inertialFluent + #definedFluent.
+
+	#agentAction = move(#blk, #loc).
+
+	#action = #agentAction.
+
+predicates
+
+	% HOLDS(FLUENT, TIME) 
+	  holds(#fluent, #time).
+      	  
+            
+	% HAS COLOR(BLK, COLOR)
+	  hasColor(#blk, #color).
+
+	% OCCURS(ACTION, TIME)
+	  occurs(#action, #time).
+
+	% GOAL(TIME)
+	  goal(#time).
+
+	% SUCCESS
+	  success().
+
+	% MOVE EXISTS(TIME)
+	  moveExists(#time).
+
+	% STACK HEIGHT(BLK, HEIGHT, TIME)
+          stackHeight(#blk, #height, #time).
+                     
+rules
+
+	%%% INITIAL CONDITIONS %%%
+
+	% BLUE blks (1-5)
+	  hasColor(b1, b).
+      	  hasColor(b2, b).
+      	  hasColor(b3, b).
+      	  hasColor(b4, b).
+          hasColor(b5, b).
+
+	% GREEN blks (6-8)
+%	  hasColor(b6, g).
+%         hasColor(b7, g).
+%         hasColor(b8, g).
+
+	% RED blks (9-12)
+%	  hasColor(b9, r). 
+%         hasColor(b10, r). 
+%    	  hasColor(b11, r). 
+%	  hasColor(b12, r).
+
+	% MAROON blks (13-14)
+%	  hasColor(b13, m). 
+%	  hasColor(b14, m).
+
+                     
+	%%% INITIAL CONFIGURATION %%%
+ 
+	% t: table; hs: human storage; rs: robot storage
+	  holds(on(b1, hs), 0). holds(on(b2, t), 0). holds(on(b3, b2), 0). holds(on(b4, rs), 0). holds(on(b5, rs), 0).
+
+	% holds(on(b6, rs), 0). 
+	% holds(on(b7, rs), 0). holds(on(b8, rs), 0). holds(on(b9, hs), 0). holds(on(b10, t), 0).
+	% holds(on(b11, rs), 0). holds(on(b12, rs), 0). holds(on(b13, hs), 0). holds(on(b14, hs), 0).
+
+
+	%%% DOMAIN DESCRIPTION %%%
+
+	% DYNAMIC CAUSAL LAW - 
+	  
+	% on(B, L) if move(B, L)
+	  holds(on(B, L), T+1) :-
+			occurs(move(B, L), T),
+			-holds(on(B, L), T).
+
+	% CWA - ACTIONS
+
+	% -move(B, L) if not move(B, L)
+	  -occurs(move(B, L), T) :-
+			not occurs(move(B, L), T).
+
+	
+	% LOC - if a blk is not on a loc at 0 we assume it is not
+	% -on(B, L) if not on(B, L) 
+	  
+	  -holds(on(B, L), 0) :-
+			  not holds(on(B, L), 0).
+	
+	
+	% IS STACK 
+	% A stack is 1) a blk on the tbl; 2) a blk on the tbl w/one or more blks on top of it
+	% isStack(B) if on(B, t)
+      	  
+	  holds(isStack(B), T) :-
+       		  holds(on(B, t), T).
+
+	% isStack(B) if holds(B, t), above(B2, B)
+	  
+	  holds(isStack(B), T) :-
+			  holds(on(B, t), T),
+			  holds(above(B2, B), T).
+
+	% CWA - IS STACK
+	% -isStack(B) if not isStack(B)
+
+	   -holds(isStack(B), T) :-
+        		  not holds(isStack(B), T).
+
+
+	
+	% IN STACK
+	% A blk is in a stack if 1) it is a stack; 2) it is above a blk that is a stack
+	% inStack(B, B) if isStack(B)
+	  
+	  holds(inStack(B, B), T) :-
+			  holds(isStack(B), T).
+
+	% inStack(B1, B2) if isStack(B2), above(B1, B2)
+	  
+	  holds(inStack(B1, B2), T) :-
+			  holds(isStack(B2), T),
+			  holds(above(B1, B2), T).
+
+	% CWA - IN STACK
+	% -inStack(B, B2) not inStack(B, B2)
+	  -holds(inStack(B, B2), T) :-
+			  not holds(inStack(B, B2), T).
+
+	
+	% STACK COLORS - A stack has color C if all its blks are color C; otherwise it is multi-colored
+	% stackColor(B, mc) if isStack(B), above(B2, B), hasColor(B, C1), hasColor(B2, C2), C1!=C2.
+	  
+	  holds(stackColor(B, mc), T) :-
+                          holds(isStack(B), T),
+                          holds(above(B2, B), T),
+                          hasColor(B, C1),
+                          hasColor(B2, C2),
+                          C1 != C2.
+
+	% stackColor(B, C) if isStack(B), isColor(B, C), -multiColored(B)
+ 	  
+	  holds(stackColor(B, C), T) :-
+                          holds(isStack(B), T),
+                          hasColor(B, C),
+                          -holds(stackColor(B, mc), T).
+
+	% CWA - STACK COLORS
+
+	% -stackColor(B, C) if not stackColor(B, C)	  
+	  -holds(stackColor(B, C), T) :-
+        		   not holds(stackColor(B, C), T).
+
+	% STACK HEIGHT - the height of a stack equals the # of blks in the stack
+	  
+	  stackHeight(B, H, T) :-
+			    holds(isStack(B), T),
+			    #count{X:holds(inStack(X,B),T)} = H.
+
+		
+	%%% STATE CONSTRAINTS %%%
+	% f if p0,...,pm
+	
+	% INERTIA AXIOMS - blks stay where they are unless they are moved
+	  
+	  holds(on(B, L), T+1) :-
+        		 holds(on(B, L), T),
+                         not -holds(on(B, L), T+1).
+	  
+	  -holds(on(B, L), T+1) :-
+                         -holds(on(B, L), T),
+                         not holds(on(B, L), T+1).
+
+	% OCCUPIED - a blk is occupied if there is a blk above it
+	% occupied(B) if above(B2, B)
+	  
+	   holds(occupied(B), T) :-
+			 holds(above(B2, B), T).
+
+	% CWA - OCCUPIED
+	% -occupied(B) if not occupied(B)
+
+	   -holds(occupied(B), T) :-
+			    not holds(occupied(B), T).
+ 
+	
+	% ABOVE - A blk is above a loc if it is on that loc; a blk is above a loc if it is on a loc above another loc
+	% above(B, L) if on(B, L)
+	  
+	  holds(above(B, L), T) :- 
+			    holds(on(B, L), T).
+	
+	% above(B, L) if on(B, L2) and above(L2, L) and L!=L2
+	  
+	  holds(above(B, L), T) :- 
+			    holds(on(B, L2), T), 
+			    holds(above(L2, L), T),
+			    L != L2.
+
+	% CWA - ABOVE
+	% -above(B, L) if not above(B, L)
+
+	   -holds(above(B, L), T) :-
+			    not holds(above(B, L), T).
+
+	
+	%%% EXECUTABILITY CONDITIONS %%%
+	% impossible a1...ak if p0,...,pm
+
+	
+	% Restriction 1 - an occupied blk cannot be moved
+	% -move(B1, L) if occupied(B)
+
+	  -occurs(move(B, L), T) :- 
+			    holds(occupied(B), T).
+
+	
+	% Restriction 2 - a blk cannot be moved to an occupied blk
+	% -move(B2, B1) if occupied(B1)
+
+	  -occurs(move(B2, B1), T) :- 
+			    holds(occupied(B1), T).
+
+	
+	% Restriction 3 - blks on the tbl may not be moved
+	% -move(B, L) if on(B, t)
+
+	  -occurs(move(B, L), T) :- 
+			    holds(on(B, t), T).
+
+	
+	% Restriction 4 - blks on other blks on the tbl may not be moved
+	% -move(B, L) if on(B, B2) (where B2 is blk)
+
+	   -occurs(move(B, L), T) :-
+	   		   holds(on(B, B2), T),
+			   #blk(B2).
+
+	
+	% Restriction 5 - Each blk has exactly one location i.e. it cannot be in 2 places at once
+	% -on(B, L2) if on(B, L1)
+
+          -holds(on(B, L2), T) :-
+                         holds(on(B, L1), T),
+                         L1 != L2. 
+
+	
+	% Restriction 6 - Each blk can have only 1 blk directly on top of it
+	% -on(B3, B1) if on(B2, B1) and B2!=B3	  
+
+          -holds(on(B3, B1), T) :-
+                         holds(on(B2, B1), T),
+                         B2 != B3,
+                         #blk(B1).
+
+	
+
+	%%% PLANNING MODULE %%%
+	% ACTION GENERATION - A blk may be moved if the goal hasn't been reached
+	% move(B, L) or -move(B, L) if not goal
+	  occurs(move(B, L), T) | -occurs(move(B, L), T) :- 
+			    not goal(T).
+
+
+	% Concurrent actions cannot take place
+	% impossible occurs(M) and occurs(M2) and M != M2.
+	  :- occurs(M, T),
+	     occurs(M2, T), 
+	     M != M2.
+ 	
+
+        % Heuristic 1 - Blks may not be moved into storage
+	% impossible move(B, hs); impossible move(B, rs)
+	  :- occurs(move(B, hs), T).
+	  :- occurs(move(B, rs), T).
+
+
+        % Heuristic 2 - A blk may not be moved onto itself
+	% impossible move(B, B)
+	  :- occurs(move(B, B), T),
+	     #blk(B).
+ 
+
+        % Heuristic 3 - A blk may not be moved to a loc it currently occupies
+	% -move(B, L) if on(B, L)
+	  :- occurs(move(B, L), T),  
+	     holds(on(B, L), T).
+	
+
+        % An action occurs at each step before the goal is achieved
+	% moveExists if move(B, L)
+	  moveExists(T) :- 
+			occurs(move(B, L), T).
+	  :- not goal(T),
+	     not moveExists(T).
+	     	
+
+        % GOAL - The goal is for the robot to carry out the command 'build another blue stack of the same height!'
+	% This means the robot must build a blue stack of height 2 on the tbl
+	% The goal is reached when there are 2 blue stacks of height 2 on the tbl
+	% goal if isStack(B), stackColor(B, C), stackHeight(B, 2), isStack(B2), stackColor(B2, C), stackHeight(B2, 2), 
+	% B! = B2.
+	  goal(T) :-
+                holds(isStack(B), T),
+                holds(stackColor(B, b), T),
+                stackHeight(B, 2, T),
+		holds(isStack(B2), T),
+                holds(stackColor(B2, b), T),
+                stackHeight(B2, 2, T),
+                B!=B2.
+
+
+        % Success if goal is reached at any time step
+	% success if goal
+	  success :- 	
+		goal(T).
+	
+
+        % Failure is not an option
+	% impossible not success
+	  :- not success.
+
+
+	
+
+
+
